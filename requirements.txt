@@ -1,0 +1,6 @@
+gradio
+openai
+numpy
+loguru
+python-dotenv
+markdown
