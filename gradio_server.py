@@ -86,7 +86,7 @@ def get_save_files():
     file_names = []
     for file in files:
         file_names.append(file)
-    file_names = [file_names[-1]]
+    file_names = [file_names[-1]] if len(file_names) > 1 else file_names
     return file_names
 
 
@@ -256,4 +256,4 @@ with gr.Blocks(css=css, title="Simple Chat") as demo:
 
     update.click(fn=update_array, inputs=[array_number, update_content], outputs=output)
 
-demo.launch(inbrowser=True)
+demo.launch(inbrowser=True, server_name='0.0.0.0', server_port=8080, debug=False)
