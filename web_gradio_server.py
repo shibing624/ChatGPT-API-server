@@ -7,7 +7,10 @@ import gradio as gr
 import os
 import json
 import requests
+from loguru import logger
 from dotenv import load_dotenv
+
+logger.add('chatgpt_api.log', rotation='10 MB', encoding='utf-8', level='DEBUG')
 
 
 def get_api_key():
@@ -85,6 +88,7 @@ def predict_chatgpt(inputs, top_p_chatgpt, temperature_chatgpt, openai_api_key, 
     chat_counter_chatgpt += 1
 
     history.append(inputs)
+    logger.info(f"input: {inputs}, history: {history}")
 
     # make a POST request to the API endpoint using the requests.post method, passing in stream=True
     response = requests.post(API_URL, headers=headers, json=payload, stream=True)
