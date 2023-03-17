@@ -173,7 +173,6 @@ with gr.Blocks(css="""#col_container {width: 1200px; margin-left: auto; margin-r
              [chatbot_chatgpt, state_chatgpt, chat_counter_chatgpt], )
 
     b2.click(reset_chat, [chatbot_chatgpt, state_chatgpt], [chatbot_chatgpt, state_chatgpt])
-
     gr.HTML(
         '''<center>Link to:<a href="https://github.com/shibing624/ChatGPT-API-server">https://github.com/shibing624/ChatGPT-API-server</a></center>''')
     gr.Markdown(description)
