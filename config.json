@@ -1,0 +1,8 @@
+{
+  "openai_api_key": "Your OpenAI API Key",
+  "model": "gpt-3.5-turbo",
+  "proxy": "",
+  "conversation_max_tokens": 1000,
+  "expires_in_seconds": 3600,
+  "system_prompt": "你是个对话小助手, 你要认真听题并回答问题。"
+}
