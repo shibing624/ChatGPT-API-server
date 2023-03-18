@@ -10,7 +10,7 @@ import requests
 from loguru import logger
 from dotenv import load_dotenv
 
-logger.add('chatgpt_api.log', rotation='10 MB', encoding='utf-8', level='DEBUG')
+logger.add('server.log', rotation='10 MB', encoding='utf-8', level='DEBUG')
 
 
 def get_api_key():
@@ -88,7 +88,8 @@ def predict_chatgpt(inputs, top_p_chatgpt, temperature_chatgpt, openai_api_key, 
     chat_counter_chatgpt += 1
 
     history.append(inputs)
-    logger.info(f"input: {inputs}, history: {history}")
+    if len(history) >=3:
+        logger.info(f"input: {history[-3]}, output: {history[-2]}")
 
     # make a POST request to the API endpoint using the requests.post method, passing in stream=True
     response = requests.post(API_URL, headers=headers, json=payload, stream=True)
@@ -146,7 +147,8 @@ with gr.Blocks(css="""#col_container {width: 1200px; margin-left: auto; margin-r
                             openai_api_key = gr.Textbox(type='password',
                                                         label="Enter your OpenAI API key here for ChatGPT",
                                                         value=api_key, visible=False)
-                        inputs = gr.Textbox(placeholder="Hi there!", label="Type an input and press Enter ⤵️ ")
+                        inputs = gr.Textbox(lines=4, placeholder="Hi there!",
+                                            label="Type input question and press Shift+Enter ⤵️ ")
                     with gr.Column(scale=1):
                         b1 = gr.Button('🏃Run', elem_id='run').style(full_width=True)
                         b2 = gr.Button('🔄Clear up Chatbots!', elem_id='clear').style(full_width=True)
@@ -177,7 +179,7 @@ with gr.Blocks(css="""#col_container {width: 1200px; margin-left: auto; margin-r
              [chatbot_chatgpt, state_chatgpt, chat_counter_chatgpt], )
 
     b2.click(reset_chat, [chatbot_chatgpt, state_chatgpt], [chatbot_chatgpt, state_chatgpt])
-    gr.HTML(
-        '''<center>Link to:<a href="https://github.com/shibing624/ChatGPT-API-server">https://github.com/shibing624/ChatGPT-API-server</a></center>''')
-    gr.Markdown(description)
+    # gr.HTML(
+    #     '''<center>Link to:<a href="https://github.com/shibing624/ChatGPT-API-server">https://github.com/shibing624/ChatGPT-API-server</a></center>''')
+    # gr.Markdown(description)
     demo.queue(concurrency_count=16).launch(height=2500, server_name='0.0.0.0', server_port=8080, debug=False)
