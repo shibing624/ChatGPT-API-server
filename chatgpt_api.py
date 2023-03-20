@@ -7,28 +7,19 @@ import os
 from loguru import logger
 import openai
 import time
-import json
+from dotenv import load_dotenv
 from datetime import datetime, timedelta
 
 pwd_path = os.path.abspath(os.path.dirname(__file__))
-
 logger.add('chatgpt_api.log', rotation='10 MB', encoding='utf-8', level='DEBUG')
 
-
-def read_file(path):
-    with open(path, mode='r', encoding='utf-8') as f:
-        return f.read()
-
-
-def load_config(config_path):
-    if not os.path.exists(config_path):
-        raise Exception('配置文件不存在，请新建config.json文件')
-
-    config_str = read_file(config_path)
-    # 将json字符串反序列化为dict类型
-    config = json.loads(config_str)
-    logger.info("[INIT] load config: {}".format(config))
-    return config
+config = {
+    "model": "gpt-3.5-turbo",
+    "proxy": "",
+    "conversation_max_tokens": 1000,
+    "expires_in_seconds": 3600,
+    "system_prompt": "你是个对话小助手, 你要认真听题并回答问题。"
+}
 
 
 class ExpiredDict(dict):
@@ -55,9 +46,22 @@ class ExpiredDict(dict):
             return default
 
 
-config_file = os.path.join(pwd_path, 'config.json')
-config = load_config(config_file)
 all_sessions = ExpiredDict(config.get('expires_in_seconds', 3600))
+
+
+def get_api_key():
+    api_key = ''
+    if os.path.isfile('.env'):
+        load_dotenv()
+        if os.environ.get('API_KEY') is not None:
+            api_key = os.environ.get('API_KEY')
+    return api_key
+
+
+def set_new_api_key(api_key):
+    # Write the api key to the .env file
+    with open('.env', 'w') as f:
+        f.write(f'API_KEY={api_key}')
 
 
 class ChatGPTBot:
@@ -65,10 +69,14 @@ class ChatGPTBot:
     OpenAI对话模型API
     """
 
-    def __init__(self):
-        openai.api_key = config.get('openai_api_key')
-        if config.get('openai_api_base'):
-            openai.api_base = config.get('openai_api_base')
+    def __init__(self, openai_api_key=''):
+        if openai_api_key:
+            set_new_api_key(openai_api_key)
+        api_key = get_api_key()
+        if not api_key:
+            logger.error('openai api key is empty, please set it in openai_api_key param.')
+            raise ValueError('openai api key is empty, please set it in openai_api_key param.')
+        openai.api_key = api_key
         proxy = config.get('proxy')
         if proxy:
             openai.proxy = proxy
@@ -123,6 +131,7 @@ class ChatGPTBot:
             # rate limit exception，20times/min
             logger.warning(e)
             if retry_count < 1:
+                logger.warning("[openai] RateLimit exceed, sleep 3s")
                 time.sleep(3)
                 logger.warning("[openai] RateLimit exceed, 第{}次重试".format(retry_count + 1))
                 return self.reply_text(session, session_id, retry_count + 1)
