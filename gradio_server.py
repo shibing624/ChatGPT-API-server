@@ -1,35 +1,25 @@
 # -*- coding: utf-8 -*-
 """
 @author:XuMing(xuming624@qq.com)
-@description:
-
-TODO
-* Edit Response
-* Save re-generated responses
-* Order files by most recent
-* Truncate messages if they exceed 4000 tokens
-
+@description: 
 """
 import gradio as gr
-import openai
 import os
 import json
-import glob
-import datetime
-import markdown
+import requests
+from loguru import logger
 from dotenv import load_dotenv
 
-messages = []
-save_dir = "output"
+logger.add('gradio_server.log', rotation='10 MB', encoding='utf-8', level='DEBUG')
 
 
-def is_api_key_set():
-    api_key_set = False
+def get_api_key():
+    api_key = ''
     if os.path.isfile('.env'):
         load_dotenv()
         if os.environ.get('API_KEY') is not None:
-            api_key_set = True
-    return api_key_set
+            api_key = os.environ.get('API_KEY')
+    return api_key
 
 
 def set_new_api_key(api_key):
@@ -37,223 +27,151 @@ def set_new_api_key(api_key):
     with open('.env', 'w') as f:
         f.write(f'API_KEY={api_key}')
 
-    # load the key
-    load_dotenv()
-    set_api_key()
-    return gr.update(visible=False)
+
+# Streaming endpoint for OPENAI ChatGPT
+API_URL = "https://api.openai.com/v1/chat/completions"
 
 
-def hide():
-    return gr.update(visible=False)
+# Predict function for CHATGPT
+def predict_chatgpt(inputs, top_p_chatgpt, temperature_chatgpt, openai_api_key, chat_counter_chatgpt,
+                    chatbot_chatgpt=[], history=[]):
+    # Define payload and header for chatgpt API
+    payload = {
+        "model": "gpt-3.5-turbo",
+        "messages": [{"role": "user", "content": f"{inputs}"}],
+        "temperature": 1.0,
+        "top_p": 1.0,
+        "n": 1,
+        "stream": True,
+        "presence_penalty": 0,
+        "frequency_penalty": 0,
+    }
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {openai_api_key}"
+    }
+
+    # Handling the different roles for ChatGPT
+    if chat_counter_chatgpt != 0:
+        messages = []
+        for data in chatbot_chatgpt:
+            temp1 = {}
+            temp1["role"] = "user"
+            temp1["content"] = data[0]
+            temp2 = {}
+            temp2["role"] = "assistant"
+            temp2["content"] = data[1]
+            messages.append(temp1)
+            messages.append(temp2)
+        temp3 = {}
+        temp3["role"] = "user"
+        temp3["content"] = inputs
+        messages.append(temp3)
+        payload = {
+            "model": "gpt-3.5-turbo",
+            "messages": messages,  # [{"role": "user", "content": f"{inputs}"}],
+            "temperature": temperature_chatgpt,  # 1.0,
+            "top_p": top_p_chatgpt,  # 1.0,
+            "n": 1,
+            "stream": True,
+            "presence_penalty": 0,
+            "frequency_penalty": 0,
+        }
+
+    chat_counter_chatgpt += 1
+
+    history.append(inputs)
+    # make a POST request to the API endpoint using the requests.post method, passing in stream=True
+    response = requests.post(API_URL, headers=headers, json=payload, stream=True)
+    token_counter = 0
+    partial_words = ""
+
+    counter = 0
+    for chunk in response.iter_lines():
+        # Skipping the first chunk
+        if counter == 0:
+            counter += 1
+            continue
+        # check whether each line is non-empty
+        if chunk.decode():
+            chunk = chunk.decode()
+            # decode each line as response data is in bytes
+            if len(chunk) > 13 and "content" in json.loads(chunk[6:])['choices'][0]["delta"]:
+                partial_words = partial_words + json.loads(chunk[6:])['choices'][0]["delta"]["content"]
+                if token_counter == 0:
+                    history.append(" " + partial_words)
+                else:
+                    history[-1] = partial_words
+                chat = [(history[i], history[i + 1]) for i in
+                        range(0, len(history) - 1, 2)]  # convert to tuples of list
+                token_counter += 1
+                yield chat, history, chat_counter_chatgpt  # this resembles {chatbot: chat, state: history}
+    logger.info(f"input: {inputs}, output: {partial_words}")
 
 
-def show():
-    return gr.update(visible=True)
+def reset_textbox():
+    return gr.update(value="")
 
 
-def set_api_key():
-    openai.api_key = os.environ.get('API_KEY')
-    api_key_set = True
+def reset_chat(chatbot, state):
+    return None, []
 
 
-def clear_chat():
-    messages.clear()
-    return [format_message_data(), get_new_filename()]
+title = """<h1 align="center">🔥🔥 ChatGPT Gradio Demo  </h1><br><h3 align="center">🚀For ChatBot</h3>"""
+description = """<center>author: shibing624</center>"""
 
-
-# I added system and file_name as inputs because when this is firing multiple times the 
-# second time has empty information and if I pass that info in then I can just ignore the other firing
-def load_save_file(value, system, file_name):
-    if (value is not None and len(value) > 0):
-        messages.clear()
-
-        selected_value = value[0] if isinstance(value, list) else value
-
-        with open(selected_value, 'r') as file:
-            json_data = json.load(file)
-
-        file_name = save_directory = os.path.basename(selected_value)
-        for data in json_data:
-            messages.append({"role": data["role"], "content": data["content"]})
-            if (data["role"] == "system"):
-                system = data["content"]
-
-    return [format_message_data(), system, file_name, None]
-
-
-def get_save_files():
-    files = glob.glob(save_dir + '/' + "*.txt")
-    file_names = []
-    for file in files:
-        file_names.append(file)
-    file_names = [file_names[-1]] if len(file_names) > 1 else file_names
-    return file_names
-
-
-def regenerate_response(context, content, file_name, autosave, autoclear, max_length, temperature, top_p,
-                        frequency_penalty, presence_penalty):
-    # if the last element in the array is assistant, remove it.
-    if len(messages) > 0 and messages[-1]["role"] == "assistant":
-        messages.pop()
-
-    return chat(context, "", file_name, autosave, autoclear, max_length, temperature, top_p, frequency_penalty,
-                presence_penalty)
-
-
-def format_message_data():
-    chat_history = "<div class='chat_container'>"
-    for index, message in enumerate(messages):
-        if message["role"] != "system":
-            onclick = "var gradio = document.getElementsByTagName(\"gradio-app\")[0].shadowRoot var textBox = gradio.querySelector(\"#update_content textarea\") var inputBox = gradio.querySelector(\"#array_number input\") var div = gradio.getElementById(\"array_{}\") inputBox.value = {} textBox.value = div.textContent || div.innerText || \"\" const input_event = new Event(\"input\") inputBox.dispatchEvent(input_event) textBox.dispatchEvent(input_event)".format(
-                index, index)
-            chat_history += "<div id=\"array_{}\" onclick='{}' class='chat_text {}'>{}</div>".format(
-                index, onclick, message["role"], markdown.markdown(message["content"], output_format='html5'))
-    chat_history += "</br></div>"
-    return chat_history
-
-
-def get_new_filename():
-    now = datetime.datetime.now()
-    formatted_time = now.strftime("%Y%m%d_%H%M%S")
-    return formatted_time + "_file.txt"
-
-
-def chat(context, content, file_name, autosave, autoclear, max_length, temperature, top_p, frequency_penalty,
-         presence_penalty):
-    if context:
-        if len(messages) > 0 and messages[0]["role"] == "system":
-            messages[0]["content"] = context
-        else:
-            messages.insert(0, {"role": "system", "content": context})
-
-    if len(content) > 0:
-        messages.append({"role": "user", "content": content})
-
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=messages,
-        temperature=temperature,
-        top_p=top_p,
-        frequency_penalty=frequency_penalty,
-        presence_penalty=presence_penalty
-    )
-
-    # add the openai response to the memory
-    messages.append(response['choices'][0]['message'])
-
-    if autosave:
-        # Check to make sure the directory exists
-        if not os.path.exists(save_dir):
-            os.makedirs(save_dir)
-
-        if len(file_name) == 0:
-            file_name = get_new_filename()
-
-        # Save the messages to file
-        with open(save_dir + '/' + file_name, 'w', encoding='utf-8') as f:
-            f.write(json.dumps(messages, ensure_ascii=False))
-
-    if autoclear:
-        content = ""
-
-    return [format_message_data(), content, get_save_files()]
-
-
-def update_array(array_number, update_content):
-    messages[array_number]["content"] = update_content
-    return format_message_data()
-
-
-if is_api_key_set():
-    set_api_key()
-
-css = "div.user {background-color:rgba(236,236,241,var(--tw-text-opacity)) text-align:right }"
-css += "div.assistant {background-color: rgba(68,70,84,var(--tw-bg-opacity)) color: rgba(236,236,241,var(--tw-text-opacity))}"
-css += ".user,.assistant {padding: 15px 10px 15px 10px margin:15px border-radius: 5px}"
-css += "code {background-color: black color: white margin: 15px 10px 15px 10px padding: 10px display: inline-block}"
-css += ".chat_container {background-color:rgb(249 250 251 / var(--tw-bg-opacity)) padding: 5px border-radius: 3px min-height:100px font-size:1.2rem}"
-css += ".dark .chat_container {background-color:rgb(17 24 39 / var(--tw-bg-opacity))}"
-css += ".dark .user {background-color:#66666d color: rgb(229 231 235 / var(--tw-text-opacity))}"
-
-with gr.Blocks(css=css, title="Simple Chat") as demo:
-    with gr.Row(visible=(not is_api_key_set())) as api_key_setup:
-        with gr.Column(scale=1):
-            api_key_box = gr.Textbox(
-                label="Set the OpenAPI key (visit https://platform.openai.com/account/api-keys to generate a key)")
-            submit_api_key = gr.Button("Submit", variant='primary')
-
-    output = gr.HTML(value=format_message_data)
-
-    with gr.Row(variant="panel").style(equal_height=False):
-        with gr.Column(scale=1):
-            editor = gr.Button("Editor", elem_id="editor")
-            close_editor = gr.Button("Close Editor", visible=False)
-            clear = gr.Button("New Chat")
-        with gr.Column(scale=2):
-            file_dropdown = gr.Dropdown(get_save_files(), label="Load File")
-        with gr.Column(scale=2):
-            file_name = gr.Textbox(label="Save file name", value=get_new_filename)
-        with gr.Column(scale=1):
-            autosave = gr.Checkbox(label="Autosave", value=True)
-            autoclear = gr.Checkbox(label="Auto-clear input", value=True)
-
-    context = gr.Textbox(label="Assistant Behavior", lines=1,
-                         placeholder="Set the behavior of the assistant (this gives weak results compared to message)...")
-    content = gr.Textbox(label="Message", lines=5)
+with gr.Blocks(css="""#col_container {width: 1200px; margin-left: auto; margin-right: auto;}
+                #chatgpt {height: 520px; overflow: auto;} """) as demo:
+    # chattogether {height: 520px; overflow: auto;} """ ) as demo:
+    # clear {width: 100px; height:50px; font-size:12px}""") as demo:
+    gr.HTML(title)
     with gr.Row():
-        update_content = gr.Textbox(label="Update message by clicking on the chat message to edit", lines=5,
-                                    visible=False, elem_id="update_content")
-        array_number = gr.Number(label="Array Number", visible=False, precision=0, elem_id="array_number")
+        with gr.Column(scale=14):
+            with gr.Box():
+                with gr.Row():
+                    with gr.Column(scale=13):
+                        api_key = get_api_key()
+                        if not api_key:
+                            openai_api_key = gr.Textbox(type='password',
+                                                        label="Enter your OpenAI API key here for ChatGPT")
+                        else:
+                            openai_api_key = gr.Textbox(type='password',
+                                                        label="Enter your OpenAI API key here for ChatGPT",
+                                                        value=api_key, visible=False)
+                        inputs = gr.Textbox(lines=4, placeholder="Hi there!",
+                                            label="Type input question and press Shift+Enter ⤵️ ")
+                    with gr.Column(scale=1):
+                        b1 = gr.Button('🏃Run', elem_id='run').style(full_width=True)
+                        b2 = gr.Button('🔄Clear up Chatbots!', elem_id='clear').style(full_width=True)
+                    state_chatgpt = gr.State([])
 
-    update = gr.Button("Update", visible=False)
+            with gr.Box():
+                with gr.Row():
+                    chatbot_chatgpt = gr.Chatbot(elem_id="chatgpt", label='ChatGPT API - OPENAI')
 
-    with gr.Row(variant="panel") as submit_row:
-        with gr.Column(scale=30):
-            submit = gr.Button("Submit", variant='primary')
-        with gr.Column(scale=1):
-            regenerate = gr.Button(value="Regenerate")
+        with gr.Column(scale=2, elem_id='parameters'):
+            with gr.Box():
+                gr.HTML("Parameters for OpenAI's ChatGPT")
+                top_p_chatgpt = gr.Slider(minimum=-0, maximum=1.0, value=1.0, step=0.05, interactive=True,
+                                          label="Top-p", )
+                temperature_chatgpt = gr.Slider(minimum=-0, maximum=5.0, value=1.0, step=0.1, interactive=True,
+                                                label="Temperature", )
+                chat_counter_chatgpt = gr.Number(value=0, visible=False, precision=0)
 
-    with gr.Accordion(label="Settings:", open=False):
-        with gr.Row():
-            with gr.Column(visible=False):
-                max_length = gr.Slider(minimum=1, maximum=4096, step=1, label="Max Length", value=4096,
-                                       interactive=True)
-            with gr.Column():
-                temperature = gr.Slider(minimum=0, maximum=1, step=0.01, label="Temperature", value=1, interactive=True)
-                top_p = gr.Slider(minimum=0, maximum=1, step=0.01, label="Top P", value=1, interactive=True)
-            with gr.Column():
-                frequency_penalty = gr.Slider(minimum=-2, maximum=2, step=0.01, label="Frequency Penalty", value=0,
-                                              interactive=True)
-                presence_penalty = gr.Slider(minimum=-2, maximum=2, step=0.01, label="Presence Penalty", value=0,
-                                             interactive=True)
+    inputs.submit(reset_textbox, [], [inputs])
 
-    # Bindings
-    submit.click(fn=chat, inputs=[context, content, file_name, autosave, autoclear, max_length, temperature, top_p,
-                                  frequency_penalty, presence_penalty], outputs=[output, content, file_dropdown])
-    regenerate.click(fn=regenerate_response,
-                     inputs=[context, content, file_name, autosave, autoclear, max_length, temperature, top_p,
-                             frequency_penalty, presence_penalty], outputs=[output, content, file_dropdown])
-    clear.click(fn=clear_chat, inputs=None, outputs=[output, file_name], show_progress=False)
-    file_dropdown.change(fn=load_save_file, inputs=[file_dropdown, context, file_name],
-                         outputs=[output, context, file_name, file_dropdown])
-    submit_api_key.click(fn=set_new_api_key, inputs=api_key_box, outputs=api_key_setup)
+    inputs.submit(predict_chatgpt,
+                  [inputs, top_p_chatgpt, temperature_chatgpt, openai_api_key, chat_counter_chatgpt, chatbot_chatgpt,
+                   state_chatgpt],
+                  [chatbot_chatgpt, state_chatgpt, chat_counter_chatgpt], )
+    b1.click(predict_chatgpt,
+             [inputs, top_p_chatgpt, temperature_chatgpt, openai_api_key, chat_counter_chatgpt, chatbot_chatgpt,
+              state_chatgpt],
+             [chatbot_chatgpt, state_chatgpt, chat_counter_chatgpt], )
 
-    # actions when clicking the editor button
-    editor.click(fn=hide, outputs=content)
-    editor.click(fn=hide, outputs=submit_row)
-    editor.click(fn=hide, outputs=editor)
-    editor.click(fn=show, outputs=close_editor)
-    editor.click(fn=show, outputs=update)
-    editor.click(fn=show, outputs=update_content)
-
-    # actions when closing the editor
-    close_editor.click(fn=show, outputs=content)
-    close_editor.click(fn=show, outputs=submit_row)
-    close_editor.click(fn=show, outputs=editor)
-    close_editor.click(fn=hide, outputs=close_editor)
-    close_editor.click(fn=hide, outputs=update)
-    close_editor.click(fn=hide, outputs=update_content)
-
-    update.click(fn=update_array, inputs=[array_number, update_content], outputs=output)
-
-demo.launch(inbrowser=True, server_name='0.0.0.0', server_port=8080, debug=False)
+    b2.click(reset_chat, [chatbot_chatgpt, state_chatgpt], [chatbot_chatgpt, state_chatgpt])
+    gr.HTML(
+        """<center>Link to:<a href="https://github.com/shibing624/ChatGPT-API-server">https://github.com/shibing624/ChatGPT-API-server</a></center>""")
+    gr.Markdown(description)
+    demo.queue(concurrency_count=3).launch(height=2500, server_name='0.0.0.0', server_port=8080, debug=False)

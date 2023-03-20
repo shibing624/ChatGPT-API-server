@@ -12,6 +12,8 @@ from datetime import datetime, timedelta
 
 pwd_path = os.path.abspath(os.path.dirname(__file__))
 
+logger.add('chatgpt_api.log', rotation='10 MB', encoding='utf-8', level='DEBUG')
+
 
 def read_file(path):
     with open(path, mode='r', encoding='utf-8') as f:
