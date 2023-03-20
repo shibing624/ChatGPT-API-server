@@ -174,4 +174,6 @@ with gr.Blocks(css="""#col_container {width: 1200px; margin-left: auto; margin-r
     gr.HTML(
         """<center>Link to:<a href="https://github.com/shibing624/ChatGPT-API-server">https://github.com/shibing624/ChatGPT-API-server</a></center>""")
     gr.Markdown(description)
+
+if __name__ == '__main__':
     demo.queue(concurrency_count=3).launch(height=2500, server_name='0.0.0.0', server_port=8080, debug=False)
