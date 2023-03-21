@@ -7,7 +7,7 @@ import os
 from loguru import logger
 import openai
 import time
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 from datetime import datetime, timedelta
 from tenacity import (
     retry,
@@ -60,22 +60,46 @@ class ChatGPTBot:
     """
 
     def __init__(self, openai_api_key=''):
-        if openai_api_key:
-            self.set_new_api_key(openai_api_key)
-        api_key = self.get_api_key()
-        if not api_key:
-            logger.error('openai api key is empty, please set it in openai_api_key param.')
-            raise ValueError('openai api key is empty, please set it in openai_api_key param.')
-        openai.api_key = api_key
         proxy = config.get('proxy')
         if proxy:
             openai.proxy = proxy
+        if openai_api_key:
+            api_key = openai_api_key
+        else:
+            api_key = self.get_api_key()
+        if not api_key:
+            logger.error('openai api key is empty, please set it in openai_api_key param.')
+            raise ValueError('openai api key is empty, please set it in openai_api_key param.')
+        if self.check_api_key(api_key):
+            self.set_new_api_key(api_key)
+        else:
+            logger.error('openai api key is invalid, please check it.')
+            raise ValueError('openai api key is invalid, please check it.')
+        openai.api_key = api_key
+
+    @staticmethod
+    def check_api_key(api_key):
+        openai.api_key = api_key
+        try:
+            openai.Model.list()
+            logger.debug(f'openai api key is valid.')
+            return True
+        except Exception as e:
+            logger.error(e)
+            return False
 
     def reply(self, query, context=None):
-        # acquire reply content
+        """
+        Acquire reply content
+        :param query:
+        :param context:
+        :return:
+        """
+        if context is None:
+            context = {}
         if not context or not context.get('type') or context.get('type') == 'TEXT':
             logger.info("[openai] query={}".format(query))
-            session_id = context.get('session_id') or context.get('from_user_id')
+            session_id = context.get('session_id') or context.get('from_user_id') or 'default'
             if query == '#clear':
                 Session.clear_session(session_id)
                 return '记忆已清除'
@@ -86,9 +110,9 @@ class ChatGPTBot:
             session = Session.build_session_query(query, session_id)
             logger.debug("[openai] session query={}".format(session))
 
-            reply_content = self.reply_text(session, session_id, 0)
-            logger.debug("[openai] new_query={}, session_id={}, reply_cont={}".format(session, session_id,
-                                                                                      reply_content["content"]))
+            reply_content = self._reply_text(session, session_id, 0)
+            logger.debug("[openai] new_query={}, session_id={}, reply_cont={}".format(
+                session, session_id, reply_content["content"]))
             if reply_content["completion_tokens"] > 0:
                 Session.save_session(reply_content["content"], session_id, reply_content["total_tokens"])
             return reply_content["content"]
@@ -99,8 +123,8 @@ class ChatGPTBot:
     @staticmethod
     def get_api_key():
         api_key = ''
-        if os.path.isfile('.env'):
-            load_dotenv()
+        if os.path.exists('.env'):
+            load_dotenv('.env')
             if os.environ.get('API_KEY') is not None:
                 api_key = os.environ.get('API_KEY')
         return api_key
@@ -112,7 +136,7 @@ class ChatGPTBot:
             f.write(f'API_KEY={api_key}')
 
     @staticmethod
-    def openai_reply(messages):
+    def _openai_reply(messages):
         """
         call openai's ChatCompletion to get the answer
         :param messages:
@@ -129,7 +153,7 @@ class ChatGPTBot:
         return response
 
     @retry(stop=stop_after_attempt(3), wait=wait_random_exponential(multiplier=1, max=5))
-    def reply_text(self, session, session_id, retry_count=0) -> dict:
+    def _reply_text(self, session, session_id, retry_count=0) -> dict:
         """
         Reply text to user
         重试间隔时间1到5秒，重试次数3
@@ -139,7 +163,7 @@ class ChatGPTBot:
         :return: {}
         """
         try:
-            response = self.openai_reply(session)
+            response = self._openai_reply(session)
             return {"total_tokens": response["usage"]["total_tokens"],
                     "completion_tokens": response["usage"]["completion_tokens"],
                     "content": response.choices[0]['message']['content']}
@@ -150,7 +174,7 @@ class ChatGPTBot:
                 logger.warning("[openai] RateLimit exceed, sleep 3s")
                 time.sleep(3)
                 logger.warning("[openai] RateLimit exceed, 第{}次重试".format(retry_count + 1))
-                return self.reply_text(session, session_id, retry_count + 1)
+                return self._reply_text(session, session_id, retry_count + 1)
             else:
                 return {"completion_tokens": 0, "content": "提问太快啦，请休息一下再问我吧"}
         except openai.error.APIConnectionError as e:
@@ -169,6 +193,12 @@ class ChatGPTBot:
             return {"completion_tokens": 0, "content": "请再问我一次吧"}
 
     def create_img(self, query, retry_count=0):
+        """
+        Create image by query
+        :param query:
+        :param retry_count:
+        :return:
+        """
         try:
             logger.info("[openai] image_query={}".format(query))
             response = openai.Image.create(

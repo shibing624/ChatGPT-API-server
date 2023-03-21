@@ -16,7 +16,7 @@ logger.add('gradio_server.log', rotation='10 MB', encoding='utf-8', level='DEBUG
 def get_api_key():
     api_key = ''
     if os.path.isfile('.env'):
-        load_dotenv()
+        load_dotenv('.env')
         if os.environ.get('API_KEY') is not None:
             api_key = os.environ.get('API_KEY')
     return api_key
