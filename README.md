@@ -32,7 +32,7 @@ python chatgpt_api.py
 
 ### Deploy on Gradio
 
-[![Run on Gradio](https://gradio.app/badge.svg)](https://huggingface.co/spaces/shibing624/ChatGPT-API-server)
+HF space: [https://huggingface.co/spaces/shibing624/ChatGPT-API-server](https://huggingface.co/spaces/shibing624/ChatGPT-API-server)
 
 ![](docs/gradio.png)
 
