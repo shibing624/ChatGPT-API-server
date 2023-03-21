@@ -14,8 +14,11 @@ A python server for ChatGPT API.
 
 ### 1. OpenAI account registration
 
-Go to [OpenAI Registration Page](https://beta.openai.com/signup) to create an account. For OpenAI Access denied Country, refer to this [tutorial](https://www.pythonthree.com/register-openai-chatgpt/) You can receive a verification code through a virtual phone number.
+Go to [OpenAI Registration Page](https://beta.openai.com/signup) to create an account. 
+
 After creating an account, go to the [API Management Page](https://beta.openai.com/account/api-keys) create an API Key and save it. Later, you need to configure this key in the project.
+
+> For OpenAI Access denied Country(like China), refer to this [tutorial](https://www.pythonthree.com/register-openai-chatgpt/) You can receive a verification code through a virtual phone number.
 
 ### 2. Install dependencies
 
