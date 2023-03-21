@@ -9,6 +9,11 @@ import openai
 import time
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_random_exponential,
+)
 
 pwd_path = os.path.abspath(os.path.dirname(__file__))
 logger.add('chatgpt_api.log', rotation='10 MB', encoding='utf-8', level='DEBUG')
@@ -49,21 +54,6 @@ class ExpiredDict(dict):
 all_sessions = ExpiredDict(config.get('expires_in_seconds', 3600))
 
 
-def get_api_key():
-    api_key = ''
-    if os.path.isfile('.env'):
-        load_dotenv()
-        if os.environ.get('API_KEY') is not None:
-            api_key = os.environ.get('API_KEY')
-    return api_key
-
-
-def set_new_api_key(api_key):
-    # Write the api key to the .env file
-    with open('.env', 'w') as f:
-        f.write(f'API_KEY={api_key}')
-
-
 class ChatGPTBot:
     """
     OpenAI对话模型API
@@ -71,8 +61,8 @@ class ChatGPTBot:
 
     def __init__(self, openai_api_key=''):
         if openai_api_key:
-            set_new_api_key(openai_api_key)
-        api_key = get_api_key()
+            self.set_new_api_key(openai_api_key)
+        api_key = self.get_api_key()
         if not api_key:
             logger.error('openai api key is empty, please set it in openai_api_key param.')
             raise ValueError('openai api key is empty, please set it in openai_api_key param.')
@@ -106,24 +96,50 @@ class ChatGPTBot:
         elif context.get('type', None) == 'IMAGE_CREATE':
             return self.create_img(query, 0)
 
-    def reply_text(self, session, session_id, retry_count=0) -> dict:
+    @staticmethod
+    def get_api_key():
+        api_key = ''
+        if os.path.isfile('.env'):
+            load_dotenv()
+            if os.environ.get('API_KEY') is not None:
+                api_key = os.environ.get('API_KEY')
+        return api_key
+
+    @staticmethod
+    def set_new_api_key(api_key):
+        # Write the api key to the .env file
+        with open('.env', 'w') as f:
+            f.write(f'API_KEY={api_key}')
+
+    @staticmethod
+    def openai_reply(messages):
         """
         call openai's ChatCompletion to get the answer
+        :param messages:
+        :return:
+        """
+        response = openai.ChatCompletion.create(
+            model=config.get("model") or "gpt-3.5-turbo",  # 对话模型的名称
+            messages=messages,
+            temperature=0.7,  # 值在[0,1]之间，越大表示回复越具有不确定性
+            top_p=1,
+            frequency_penalty=0,  # [-2,2]之间，该值越大则更倾向于产生不同的内容
+            presence_penalty=0,  # [-2,2]之间，该值越大则更倾向于产生不同的内容
+        )
+        return response
+
+    @retry(stop=stop_after_attempt(3), wait=wait_random_exponential(multiplier=1, max=5))
+    def reply_text(self, session, session_id, retry_count=0) -> dict:
+        """
+        Reply text to user
+        重试间隔时间1到5秒，重试次数3
         :param session: a conversation session
         :param session_id: session id
         :param retry_count: retry count
         :return: {}
         """
         try:
-            response = openai.ChatCompletion.create(
-                model=config.get("model") or "gpt-3.5-turbo",  # 对话模型的名称
-                messages=session,
-                temperature=0.7,  # 值在[0,1]之间，越大表示回复越具有不确定性
-                # max_tokens=4096,  # 回复最大的字符数
-                top_p=1,
-                frequency_penalty=0.0,  # [-2,2]之间，该值越大则更倾向于产生不同的内容
-                presence_penalty=0.0,  # [-2,2]之间，该值越大则更倾向于产生不同的内容
-            )
+            response = self.openai_reply(session)
             return {"total_tokens": response["usage"]["total_tokens"],
                     "completion_tokens": response["usage"]["completion_tokens"],
                     "content": response.choices[0]['message']['content']}

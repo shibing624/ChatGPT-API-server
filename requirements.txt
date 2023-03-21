@@ -4,3 +4,4 @@ numpy
 loguru
 python-dotenv
 markdown
+tenacity
