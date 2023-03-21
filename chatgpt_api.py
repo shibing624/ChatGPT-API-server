@@ -299,3 +299,8 @@ if __name__ == '__main__':
 
     r = m.reply("你把这个笑话改一下，内容成分不变，改为悲剧短文", context2)
     print(r)
+
+    # Image generation example
+    context = {'session_id': 'UserName3', 'type': 'IMAGE_CREATE'}
+    r = m.reply('画2个猫再一起玩球', context)
+    print(r)

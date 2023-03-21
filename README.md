@@ -5,6 +5,7 @@ A python server for ChatGPT API.
 ## Features
 
 - [x] **Text conversation**, text conversation chat function based on ChatGPT official API
+- [x] **Image Generation**, image generation with prompt based on ChatGPT official API
 - [x] **Multiple rounds of conversation**, supports multiple rounds of conversation, and can remember the conversation context
 - [x] **Multi person conversation**, supports multi person conversations, and each person's conversation can maintain an independent context
 - [x] **Customizing the expiration duration**, which allows you to customize the expiration duration of the conversation context
