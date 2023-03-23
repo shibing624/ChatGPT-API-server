@@ -46,7 +46,7 @@ python gradio_server.py
 
 # Contact
 
-- Github Issue：[![GitHub issues](https://img.shields.io/github/issues/shibing624/pycorrector.svg)](https://github.com/shibing624/pycorrector/issues)
+- Github Issue：[![GitHub issues](https://img.shields.io/github/issues/shibing624/ChatGPT-API-server.svg)](https://github.com/shibing624/ChatGPT-API-server/issues)
 - Email：xuming: xuming624@qq.com
 - WeChat：加我*微信号：xuming624*, 进Python-NLP交流群，备注：*姓名-公司名-NLP*
 
