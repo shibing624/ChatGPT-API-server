@@ -44,9 +44,16 @@ run example: [gradio_server.py](gradio_server.py) to see the demo:
 python gradio_server.py
 ```
 
+# Contact
+
+- Github Issue：[![GitHub issues](https://img.shields.io/github/issues/shibing624/pycorrector.svg)](https://github.com/shibing624/pycorrector/issues)
+- Email：xuming: xuming624@qq.com
+- WeChat：加我*微信号：xuming624*, 进Python-NLP交流群，备注：*姓名-公司名-NLP*
+
+<img src="https://github.com/shibing624/ChatGPT-API-server/blob/main/docs/wechat.jpeg" width="200" />
+
 # Citation
 
-BibTeX:
 ```latex
 @misc{Xu_ChatGPT-API-server,
   title={ChatGPT-API-server: ChatGPT API server},
