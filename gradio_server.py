@@ -176,4 +176,5 @@ with gr.Blocks(css="""#col_container {width: 1200px; margin-left: auto; margin-r
     gr.Markdown(description)
 
 if __name__ == '__main__':
-    demo.queue(concurrency_count=3).launch(height=2500, server_name='0.0.0.0', server_port=8080, debug=False)
+    demo.queue(concurrency_count=3).launch(height=2500, server_name='0.0.0.0', server_port=8080, debug=False,
+                                           share=False, inbrowser=True)
